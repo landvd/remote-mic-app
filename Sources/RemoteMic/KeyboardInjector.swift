@@ -2039,7 +2039,19 @@ enum KeyboardInjector {
                 usleep(useconds_t(interval * 1_000))
             }
         }
+        hideCursorUntilMouseMoves()
         return true
+    }
+
+    private static func hideCursorUntilMouseMoves() {
+        let hide = {
+            NSCursor.setHiddenUntilMouseMoves(true)
+        }
+        if Thread.isMainThread {
+            hide()
+        } else {
+            DispatchQueue.main.async(execute: hide)
+        }
     }
 
     static func codexPageScrollEventDeltas(
