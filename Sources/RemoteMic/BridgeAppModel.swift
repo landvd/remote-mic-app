@@ -778,7 +778,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         finishRC003VoiceExtensionTest(reason: "app_stop")
         voiceInputDestinationCoordinator.shutdown()
         voiceFnTapSession.shutdown()
-        _ = updateWeChatVoiceKeyState(pressed: false)
+        _ = updateWeChatVoiceKeyState(pressed: false, owner: .mobile)
         bluetoothBridges.values.forEach { $0.stop() }
         discoveryBluetoothBridge?.stop()
         bluetoothBridges.removeAll()
@@ -2603,7 +2603,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             applicationBundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         )
         if configured.action.isHoldAction {
-            guard updateWeChatVoiceKeyState(pressed: phase == .press) else {
+            guard updateWeChatVoiceKeyState(pressed: phase == .press, owner: .mobile) else {
                 return false
             }
             if phase == .press {
@@ -2827,7 +2827,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         guard configured.action.isHoldAction else {
             return false
         }
-        return updateWeChatVoiceKeyState(pressed: phase == .press)
+        return updateWeChatVoiceKeyState(pressed: phase == .press, owner: .mobile)
     }
 
     private func handleVoiceInputDestinationState(_ state: VoiceInputDestinationState) {
@@ -3536,13 +3536,19 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     }
 
     @discardableResult
-    private func updateWeChatVoiceKeyState(pressed: Bool) -> Bool {
-        guard let transition = weChatVoiceKeyLatch.transition(streaming: pressed) else {
+    private func updateWeChatVoiceKeyState(
+        pressed: Bool,
+        owner: VoiceFunctionKeyLatch.Owner
+    ) -> Bool {
+        guard let transition = weChatVoiceKeyLatch.transition(
+            streaming: pressed,
+            owner: owner
+        ) else {
             return true
         }
         let shouldHold = transition == .press
         guard KeyboardInjector.setRightOptionKeyPressed(shouldHold) else {
-            weChatVoiceKeyLatch.rollback(transition)
+            weChatVoiceKeyLatch.rollback(transition, owner: owner)
             AppLogger.shared.write(
                 "WECHAT RIGHT_OPTION \(shouldHold ? "DOWN" : "UP") failed"
             )
@@ -3555,13 +3561,19 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     }
 
     @discardableResult
-    private func updatePhoneVoiceFunctionKeyState(streaming: Bool) -> Bool {
-        guard let transition = phoneVoiceFunctionKeyLatch.transition(streaming: streaming) else {
+    private func updatePhoneVoiceFunctionKeyState(
+        streaming: Bool,
+        owner: VoiceFunctionKeyLatch.Owner
+    ) -> Bool {
+        guard let transition = phoneVoiceFunctionKeyLatch.transition(
+            streaming: streaming,
+            owner: owner
+        ) else {
             return true
         }
         let shouldHold = transition == .press
         guard KeyboardInjector.setFunctionKeyPressed(shouldHold) else {
-            phoneVoiceFunctionKeyLatch.rollback(transition)
+            phoneVoiceFunctionKeyLatch.rollback(transition, owner: owner)
             AppLogger.shared.write(
                 "PHONE VOICE FN \(shouldHold ? "DOWN" : "UP") failed"
             )

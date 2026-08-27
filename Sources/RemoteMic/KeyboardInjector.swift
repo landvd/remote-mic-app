@@ -370,9 +370,10 @@ enum KeyboardInjector {
             }
             let focusRequestID = focusRequests.begin()
             scheduleAccessibilityComposerFocus(
-                application: .codex,
+                bundleIdentifier: PresetApplication.codex.bundleIdentifier,
                 processIdentifier: processIdentifier,
                 requestID: focusRequestID,
+                requestGate: focusRequests,
                 attempt: 0,
                 mouseClickPoster: mouseClickPoster
             )
@@ -783,8 +784,8 @@ enum KeyboardInjector {
         requestID: UInt64,
         requestGate: ApplicationFocusRequestGate,
         attempt: Int,
-        completion: ((Bool) -> Void)? = nil
-        , mouseClickPoster: MouseClickPoster? = nil
+        completion: ((Bool) -> Void)? = nil,
+        mouseClickPoster: MouseClickPoster? = nil
     ) {
         let delay: DispatchTimeInterval = attempt == 0
             ? .milliseconds(0)
@@ -853,8 +854,8 @@ enum KeyboardInjector {
                     requestID: requestID,
                     requestGate: requestGate,
                     attempt: nextAttempt,
-                    completion: completion
-                    , mouseClickPoster: mouseClickPoster
+                    completion: completion,
+                    mouseClickPoster: mouseClickPoster
                 )
             } else if requestGate.isCurrent(requestID) {
                 AppLogger.shared.write(

@@ -12,27 +12,6 @@ struct VoiceKeyConfigurationState: Equatable {
     let fnTapModeEnabled: Bool
 }
 
-enum VoiceKeyMode: String, Codable, CaseIterable, Identifiable {
-    case fnGlobe = "fn_globe"
-    // Kept only so older exported configurations can still be decoded.
-    case rightOptionHold = "right_option_hold"
-
-    static let allCases: [VoiceKeyMode] = [.fnGlobe]
-
-    var id: String { rawValue }
-
-    func displayName(using localization: LocalizationStore) -> String {
-        switch self {
-        case .fnGlobe: return localization.text("connection.voice_key.mode.fn_globe")
-        case .rightOptionHold: return localization.text("connection.voice_key.mode.fn_globe")
-        }
-    }
-
-    var normalized: VoiceKeyMode {
-        .fnGlobe
-    }
-}
-
 private struct PersonalizedConfiguration: Codable {
     let formatVersion: Int
     let gainDB: Double

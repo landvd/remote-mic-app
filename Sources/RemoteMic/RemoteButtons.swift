@@ -586,12 +586,11 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
         case .disabled, .escape, .returnKey, .commandReturn, .shiftReturn, .commandCopy,
              .commandPaste, .commandClose, .commandQuit, .commandCut, .commandSelectAll,
              .commandUndo, .commandRedo, .commandFind, .commandSave, .commandDelete,
-             .arrowUp, .arrowDown, .arrowLeft, .arrowRight,
+             .arrowUp, .arrowDown, .arrowLeft, .arrowRight, .scrollUp, .scrollDown,
              .deleteBackward:
             return .basicKeys
         case .showDesktop, .contextMenu, .appSwitcher, .volumeUp, .volumeDown, .volumeMute,
-             .playPause, .previousCommandLeft, .nextCommandRight,
-             .scrollUp, .scrollDown, .toggleLongRecording:
+             .playPause, .previousCommandLeft, .nextCommandRight, .toggleLongRecording:
             return .systemAndMedia
         case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest, .codexPageUp, .codexPageDown,
              .wechatVoiceMessage:
