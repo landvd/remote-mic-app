@@ -1205,6 +1205,18 @@ struct RemoteButtonsTests {
         #expect(KeyboardInjector.codexPageScrollDelta(for: .codexPageDown, lines: 99) == -50)
         #expect(!ButtonAction.codexPageUp.allowsRepeat)
         #expect(!ButtonAction.codexPageDown.allowsRepeat)
+        #expect(KeyboardInjector.shouldUseProcessScopedEvents(
+            enabled: true,
+            processIdentifier: pid_t(123)
+        ))
+        #expect(!KeyboardInjector.shouldUseProcessScopedEvents(
+            enabled: true,
+            processIdentifier: nil
+        ))
+        #expect(!KeyboardInjector.shouldUseProcessScopedEvents(
+            enabled: false,
+            processIdentifier: pid_t(123)
+        ))
     }
 
     @Test func pageScrollPreservesConfiguredStepAcrossEventBurst() {
@@ -2077,6 +2089,7 @@ struct RemoteButtonsTests {
         settings.setScrollDirectionInverted(true, applicationMappingProfileID: profileID)
         settings.setPageScrollLines(24, applicationMappingProfileID: profileID)
         settings.setPageScrollIntervalMilliseconds(15, applicationMappingProfileID: profileID)
+        settings.setProcessScopedScrollEventsEnabled(true, applicationMappingProfileID: profileID)
 
         let appScrollSettings = settings.scrollSettings(
             forApplicationBundleIdentifier: "com.example.codex"
@@ -2085,7 +2098,8 @@ struct RemoteButtonsTests {
             scrollSpeed: 8,
             scrollDirectionInverted: true,
             pageScrollLines: 24,
-            pageScrollIntervalMilliseconds: 15
+            pageScrollIntervalMilliseconds: 15,
+            processScopedScrollEventsEnabled: true
         ))
         #expect(settings.scrollSettings(
             forApplicationBundleIdentifier: "com.example.other"
@@ -2118,7 +2132,8 @@ struct RemoteButtonsTests {
             scrollSpeed: 8,
             scrollDirectionInverted: true,
             pageScrollLines: 24,
-            pageScrollIntervalMilliseconds: 15
+            pageScrollIntervalMilliseconds: 15,
+            processScopedScrollEventsEnabled: true
         ))
     }
 

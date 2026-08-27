@@ -2809,7 +2809,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             pageScrollLines: Int32(scrollSettings.pageScrollLines),
             pageScrollIntervalMilliseconds: Int32(
                 scrollSettings.pageScrollIntervalMilliseconds
-            )
+            ),
+            processScopedScrollEventsEnabled: scrollSettings.processScopedScrollEventsEnabled
         )
         if !handled, let requestID {
             voiceInputDestinationCoordinator.cancel(requestID: requestID, reason: .actionFailed)
