@@ -36,7 +36,6 @@ private struct PersonalizedConfiguration: Codable {
     let scrollDirectionInverted: Bool?
     let pageScrollLines: Int?
     let pageScrollIntervalMilliseconds: Int?
-    let processScopedScrollEventsEnabled: Bool?
 }
 
 enum UsageStatisticsPeriod: String, CaseIterable, Identifiable {
@@ -256,7 +255,6 @@ final class AppSettings: ObservableObject {
         static let scrollDirectionInverted = "scrollDirectionInverted"
         static let pageScrollLines = "pageScrollLines"
         static let pageScrollIntervalMilliseconds = "pageScrollIntervalMilliseconds"
-        static let processScopedScrollEventsEnabled = "processScopedScrollEventsEnabled"
         static let applicationLanguage = "applicationLanguage"
         static let showDockIcon = "showDockIcon"
         static let openMainWindowAtLaunch = "openMainWindowAtLaunch"
@@ -394,15 +392,6 @@ final class AppSettings: ObservableObject {
             defaults.set(
                 pageScrollIntervalMilliseconds,
                 forKey: Keys.pageScrollIntervalMilliseconds
-            )
-        }
-    }
-
-    @Published var processScopedScrollEventsEnabled: Bool {
-        didSet {
-            defaults.set(
-                processScopedScrollEventsEnabled,
-                forKey: Keys.processScopedScrollEventsEnabled
             )
         }
     }
@@ -579,9 +568,6 @@ final class AppSettings: ObservableObject {
             defaults.object(forKey: Keys.pageScrollIntervalMilliseconds) == nil
                 ? 12
                 : defaults.integer(forKey: Keys.pageScrollIntervalMilliseconds)
-        )
-        processScopedScrollEventsEnabled = defaults.bool(
-            forKey: Keys.processScopedScrollEventsEnabled
         )
         gainDB = defaults.object(forKey: Keys.gainDB) == nil
             ? 10.0
@@ -960,8 +946,7 @@ final class AppSettings: ObservableObject {
             scrollSpeed: scrollSpeed,
             scrollDirectionInverted: scrollDirectionInverted,
             pageScrollLines: pageScrollLines,
-            pageScrollIntervalMilliseconds: pageScrollIntervalMilliseconds,
-            processScopedScrollEventsEnabled: processScopedScrollEventsEnabled
+            pageScrollIntervalMilliseconds: pageScrollIntervalMilliseconds
         )
     }
 
@@ -1081,21 +1066,6 @@ final class AppSettings: ObservableObject {
         }
         var profile = applicationMappingProfiles[index]
         profile.scrollSettings.pageScrollIntervalMilliseconds = Self.normalizedPageScrollInterval(value)
-        applicationMappingProfiles[index] = profile
-    }
-
-    func setProcessScopedScrollEventsEnabled(
-        _ value: Bool,
-        applicationMappingProfileID profileID: UUID?
-    ) {
-        guard let profileID,
-              let index = applicationMappingProfiles.firstIndex(where: { $0.id == profileID })
-        else {
-            processScopedScrollEventsEnabled = value
-            return
-        }
-        var profile = applicationMappingProfiles[index]
-        profile.scrollSettings.processScopedScrollEventsEnabled = value
         applicationMappingProfiles[index] = profile
     }
 
@@ -1839,8 +1809,7 @@ final class AppSettings: ObservableObject {
             scrollSpeed: scrollSpeed,
             scrollDirectionInverted: scrollDirectionInverted,
             pageScrollLines: pageScrollLines,
-            pageScrollIntervalMilliseconds: pageScrollIntervalMilliseconds,
-            processScopedScrollEventsEnabled: processScopedScrollEventsEnabled
+            pageScrollIntervalMilliseconds: pageScrollIntervalMilliseconds
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -1934,7 +1903,6 @@ final class AppSettings: ObservableObject {
         pageScrollIntervalMilliseconds = Self.normalizedPageScrollInterval(
             configuration.pageScrollIntervalMilliseconds ?? 12
         )
-        processScopedScrollEventsEnabled = configuration.processScopedScrollEventsEnabled ?? false
         applyContinuousRecordingExperimentState(
             enabled: configuration.experimentalContinuousRecordingEnabled ?? false,
             backup: configuration.continuousRecordingPowerBindingBackup

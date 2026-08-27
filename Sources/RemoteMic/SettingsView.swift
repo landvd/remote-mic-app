@@ -1413,25 +1413,6 @@ struct SettingsView: View {
                 }
                 .font(.system(size: 12))
 
-                Toggle(
-                    localization.text("button_mapping.scroll_settings.process_scoped"),
-                    isOn: Binding(
-                        get: {
-                            settings.scrollSettings(
-                                forApplicationMappingProfileID: profileID
-                            ).processScopedScrollEventsEnabled
-                        },
-                        set: {
-                            settings.setProcessScopedScrollEventsEnabled(
-                                $0,
-                                applicationMappingProfileID: profileID
-                            )
-                        }
-                    )
-                )
-                .toggleStyle(.switch)
-                .font(.system(size: 12))
-
                 Text("button_mapping.scroll_settings.hint")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)

@@ -146,45 +146,17 @@ struct ApplicationScrollSettings: Codable, Equatable {
     var scrollDirectionInverted: Bool
     var pageScrollLines: Int
     var pageScrollIntervalMilliseconds: Int
-    var processScopedScrollEventsEnabled: Bool
 
     init(
         scrollSpeed: Int = 5,
         scrollDirectionInverted: Bool = false,
         pageScrollLines: Int = 12,
-        pageScrollIntervalMilliseconds: Int = 12,
-        processScopedScrollEventsEnabled: Bool = false
+        pageScrollIntervalMilliseconds: Int = 12
     ) {
         self.scrollSpeed = min(max(scrollSpeed, 1), 10)
         self.scrollDirectionInverted = scrollDirectionInverted
         self.pageScrollLines = min(max(pageScrollLines, 1), 50)
         self.pageScrollIntervalMilliseconds = min(max(pageScrollIntervalMilliseconds, 10), 15)
-        self.processScopedScrollEventsEnabled = processScopedScrollEventsEnabled
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case scrollSpeed
-        case scrollDirectionInverted
-        case pageScrollLines
-        case pageScrollIntervalMilliseconds
-        case processScopedScrollEventsEnabled
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(
-            scrollSpeed: try container.decode(Int.self, forKey: .scrollSpeed),
-            scrollDirectionInverted: try container.decode(Bool.self, forKey: .scrollDirectionInverted),
-            pageScrollLines: try container.decode(Int.self, forKey: .pageScrollLines),
-            pageScrollIntervalMilliseconds: try container.decode(
-                Int.self,
-                forKey: .pageScrollIntervalMilliseconds
-            ),
-            processScopedScrollEventsEnabled: try container.decodeIfPresent(
-                Bool.self,
-                forKey: .processScopedScrollEventsEnabled
-            ) ?? false
-        )
     }
 }
 

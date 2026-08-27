@@ -172,8 +172,7 @@ final class HIDRemoteMonitor {
                 pageScrollLines: Int32(scrollSettings.pageScrollLines),
                 pageScrollIntervalMilliseconds: Int32(
                     scrollSettings.pageScrollIntervalMilliseconds
-                ),
-                processScopedScrollEventsEnabled: scrollSettings.processScopedScrollEventsEnabled
+                )
             )
         }
         self.holdActionPerformer = holdActionPerformer ?? { _, _, _ in true }

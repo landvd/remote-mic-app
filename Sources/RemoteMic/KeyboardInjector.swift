@@ -262,8 +262,7 @@ enum KeyboardInjector {
         scrollSpeed: Int32 = 5,
         scrollDirectionInverted: Bool = false,
         pageScrollLines: Int32 = 12,
-        pageScrollIntervalMilliseconds: Int32 = 12,
-        processScopedScrollEventsEnabled: Bool = false
+        pageScrollIntervalMilliseconds: Int32 = 12
     ) -> Bool {
         guard action != .disabled else { return true }
         if action.isAppInternal {
@@ -348,25 +347,21 @@ enum KeyboardInjector {
         case .arrowRight:
             keyPoster(124, [])
         case .scrollUp:
-            let delta = scrollDelta(
-                for: .scrollUp,
-                speed: scrollSpeed,
-                inverted: scrollDirectionInverted
+            return scrollEventPoster(
+                scrollDelta(
+                    for: .scrollUp,
+                    speed: scrollSpeed,
+                    inverted: scrollDirectionInverted
+                )
             )
-            if processScopedScrollEventsEnabled {
-                return postScrollWheel(delta: delta, useProcessScopedEvents: true)
-            }
-            return scrollEventPoster(delta)
         case .scrollDown:
-            let delta = scrollDelta(
-                for: .scrollDown,
-                speed: scrollSpeed,
-                inverted: scrollDirectionInverted
+            return scrollEventPoster(
+                scrollDelta(
+                    for: .scrollDown,
+                    speed: scrollSpeed,
+                    inverted: scrollDirectionInverted
+                )
             )
-            if processScopedScrollEventsEnabled {
-                return postScrollWheel(delta: delta, useProcessScopedEvents: true)
-            }
-            return scrollEventPoster(delta)
         case .codexStopGeneration:
             keyPoster(53, [])
         case .codexFocusInput:
@@ -386,29 +381,13 @@ enum KeyboardInjector {
         case .codexScrollToLatest:
             keyPoster(119, .maskCommand)
         case .codexPageUp:
-            let delta = codexPageScrollDelta(for: .codexPageUp, lines: pageScrollLines)
-            if processScopedScrollEventsEnabled {
-                return postCodexPageScroll(
-                    delta: delta,
-                    intervalMilliseconds: pageScrollIntervalMilliseconds,
-                    useProcessScopedEvents: true
-                )
-            }
             return pageScrollEventPoster(
-                delta,
+                codexPageScrollDelta(for: .codexPageUp, lines: pageScrollLines),
                 pageScrollIntervalMilliseconds
             )
         case .codexPageDown:
-            let delta = codexPageScrollDelta(for: .codexPageDown, lines: pageScrollLines)
-            if processScopedScrollEventsEnabled {
-                return postCodexPageScroll(
-                    delta: delta,
-                    intervalMilliseconds: pageScrollIntervalMilliseconds,
-                    useProcessScopedEvents: true
-                )
-            }
             return pageScrollEventPoster(
-                delta,
+                codexPageScrollDelta(for: .codexPageDown, lines: pageScrollLines),
                 pageScrollIntervalMilliseconds
             )
         case .deleteBackward:
@@ -1997,10 +1976,7 @@ enum KeyboardInjector {
         return true
     }
 
-    static func postScrollWheel(
-        delta: Int32,
-        useProcessScopedEvents: Bool = false
-    ) -> Bool {
+    static func postScrollWheel(delta: Int32) -> Bool {
         guard let source = CGEventSource(stateID: .hidSystemState),
               let event = CGEvent(
                   scrollWheelEvent2Source: source,
@@ -2016,20 +1992,13 @@ enum KeyboardInjector {
             mouseLocation: currentMouseLocation()
         )
         event.setIntegerValueField(.eventSourceUserData, value: syntheticEventMarker)
-        let route = postScrollEvent(
-            event,
-            useProcessScopedEvents: useProcessScopedEvents
-        )
-        if useProcessScopedEvents {
-            AppLogger.shared.write("SCROLL posted route=\(route) delta=\(delta)")
-        }
+        event.post(tap: .cghidEventTap)
         return true
     }
 
     private static func postCodexPageScroll(
         delta: Int32,
-        intervalMilliseconds: Int32 = 12,
-        useProcessScopedEvents: Bool = false
+        intervalMilliseconds: Int32 = 12
     ) -> Bool {
         let interval = min(max(intervalMilliseconds, 10), 15)
         let eventDeltas = codexPageScrollEventDeltas(
@@ -2061,13 +2030,10 @@ enum KeyboardInjector {
             // continuous gesture and ignore later page actions.
             event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 0)
             event.setIntegerValueField(.eventSourceUserData, value: syntheticEventMarker)
-            let route = postScrollEvent(
-                event,
-                useProcessScopedEvents: useProcessScopedEvents
-            )
+            event.post(tap: .cghidEventTap)
             AppLogger.shared.write(
                 "CODEX PAGE SCROLL posted delta=\(eventDelta) index=\(index + 1)/\(eventDeltas.count) " +
-                    "location=\(Int(windowCenter.x)),\(Int(windowCenter.y)) route=\(route)"
+                    "location=\(Int(windowCenter.x)),\(Int(windowCenter.y))"
             )
             if index < eventDeltas.index(before: eventDeltas.endIndex) {
                 usleep(useconds_t(interval * 1_000))
@@ -2106,29 +2072,6 @@ enum KeyboardInjector {
     static func codexPageScrollDelta(for action: ButtonAction, lines: Int32 = codexPageScrollLines) -> Int32 {
         let normalizedLines = min(max(abs(lines), 1), 50)
         return action == .codexPageDown ? -normalizedLines : normalizedLines
-    }
-
-    private static func postScrollEvent(
-        _ event: CGEvent,
-        useProcessScopedEvents: Bool
-    ) -> String {
-        let processIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        if shouldUseProcessScopedEvents(
-            enabled: useProcessScopedEvents,
-            processIdentifier: processIdentifier
-        ), let processIdentifier {
-            event.postToPid(processIdentifier)
-            return "pid:\(processIdentifier)"
-        }
-        event.post(tap: .cghidEventTap)
-        return useProcessScopedEvents ? "hid_fallback_pid_unavailable" : "hid"
-    }
-
-    static func shouldUseProcessScopedEvents(
-        enabled: Bool,
-        processIdentifier: pid_t?
-    ) -> Bool {
-        enabled && processIdentifier != nil
     }
 
     private static func frontmostWindowCenter() -> CGPoint? {
