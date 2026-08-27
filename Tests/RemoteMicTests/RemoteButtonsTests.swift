@@ -240,7 +240,7 @@ struct RemoteButtonsTests {
         #expect(ButtonAction.previousCommandLeft.category == .systemAndMedia)
         #expect(ButtonAction.nextCommandRight.category == .systemAndMedia)
         #expect(ButtonAction.codexStopGeneration.category == .applicationSpecific)
-        #expect(ButtonAction.codexPageUp.category == .applicationSpecific)
+        #expect(ButtonAction.codexPageUp.category == .basicKeys)
         #expect(ButtonAction.wechatVoiceMessage.category == .applicationSpecific)
         #expect(ButtonAction.customShortcut.category == .custom)
         #expect(ButtonAction.openCustomApplication.category == .custom)
@@ -1176,7 +1176,7 @@ struct RemoteButtonsTests {
         #expect(posted[1].1 == .maskCommand)
     }
 
-    @Test func codexPageActionsPostIndependentLargeScrollDeltas() {
+    @Test func pageActionsPostIndependentLargeScrollDeltas() {
         var deltas: [Int32] = []
         var intervals: [Int32] = []
         let poster: KeyboardInjector.PageScrollEventPoster = { delta, interval in
@@ -1207,7 +1207,7 @@ struct RemoteButtonsTests {
         #expect(!ButtonAction.codexPageDown.allowsRepeat)
     }
 
-    @Test func codexPageScrollPreservesConfiguredStepAcrossEventBurst() {
+    @Test func pageScrollPreservesConfiguredStepAcrossEventBurst() {
         #expect(KeyboardInjector.codexPageScrollEventDeltas(delta: 12) == [4, 4, 4])
         #expect(KeyboardInjector.codexPageScrollEventDeltas(delta: -14) == [-5, -5, -4])
         #expect(KeyboardInjector.codexPageScrollEventDeltas(delta: 2, eventCount: 3) == [1, 1])
@@ -1234,13 +1234,15 @@ struct RemoteButtonsTests {
         #expect(ButtonAction.codexPageUp.isAvailable(
             forApplicationBundleIdentifier: PresetApplication.codex.bundleIdentifier
         ))
-        #expect(!ButtonAction.codexPageUp.isAvailable(
+        #expect(ButtonAction.codexPageUp.isAvailable(
             forApplicationBundleIdentifier: "com.example.other"
         ))
         #expect(ButtonAction.codexPageUp.displayName(
             using: localization,
             applicationName: "ChatGPT"
-        ).contains("ChatGPT"))
+        ) == localization.text("action.page_up"))
+        #expect(ButtonAction.codexPageDown.category == .basicKeys)
+        #expect(ButtonAction.codexPageDown.isAvailable(forApplicationBundleIdentifier: nil))
         #expect(ButtonAction.wechatVoiceMessage.isAvailable(
             forApplicationBundleIdentifier: PresetApplication.weChat.bundleIdentifier
         ))

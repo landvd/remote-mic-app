@@ -525,9 +525,9 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
         case .codexScrollToLatest:
             return applicationSpecificName + " " + localization.text("action.app.scroll_to_latest")
         case .codexPageUp:
-            return applicationSpecificName + " " + localization.text("action.app.page_up")
+            return localization.text("action.page_up")
         case .codexPageDown:
-            return applicationSpecificName + " " + localization.text("action.app.page_down")
+            return localization.text("action.page_down")
         case .deleteBackward: return localization.text("action.delete_backspace")
         case .showDesktop: return localization.text("action.show_desktop")
         case .contextMenu: return localization.text("action.context_menu")
@@ -587,12 +587,13 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
              .commandPaste, .commandClose, .commandQuit, .commandCut, .commandSelectAll,
              .commandUndo, .commandRedo, .commandFind, .commandSave, .commandDelete,
              .arrowUp, .arrowDown, .arrowLeft, .arrowRight, .scrollUp, .scrollDown,
+             .codexPageUp, .codexPageDown,
              .deleteBackward:
             return .basicKeys
         case .showDesktop, .contextMenu, .appSwitcher, .volumeUp, .volumeDown, .volumeMute,
              .playPause, .previousCommandLeft, .nextCommandRight, .toggleLongRecording:
             return .systemAndMedia
-        case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest, .codexPageUp, .codexPageDown,
+        case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest,
              .wechatVoiceMessage:
             return .applicationSpecific
         case .customShortcut, .focusInput, .openCustomApplication:
@@ -643,7 +644,7 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
 
     var applicationSpecificBundleIdentifier: String? {
         switch self {
-        case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest, .codexPageUp, .codexPageDown:
+        case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest:
             return PresetApplication.codex.bundleIdentifier
         case .wechatVoiceMessage:
             return PresetApplication.weChat.bundleIdentifier
