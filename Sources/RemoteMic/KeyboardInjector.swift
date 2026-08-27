@@ -2112,40 +2112,23 @@ enum KeyboardInjector {
         _ event: CGEvent,
         useProcessScopedEvents: Bool
     ) -> String {
-        let frontmostApplication = NSWorkspace.shared.frontmostApplication
-        let processIdentifier = frontmostApplication?.processIdentifier
-        let bundleIdentifier = frontmostApplication?.bundleIdentifier
+        let processIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier
         if shouldUseProcessScopedEvents(
             enabled: useProcessScopedEvents,
-            processIdentifier: processIdentifier,
-            bundleIdentifier: bundleIdentifier
+            processIdentifier: processIdentifier
         ), let processIdentifier {
             event.postToPid(processIdentifier)
             return "pid:\(processIdentifier)"
         }
         event.post(tap: .cghidEventTap)
-        guard useProcessScopedEvents else { return "hid" }
-        if let bundleIdentifier,
-           processScopedScrollEventsUnsupportedBundleIdentifiers.contains(bundleIdentifier) {
-            return "hid_fallback_unsupported_bundle:\(bundleIdentifier)"
-        }
-        return "hid_fallback_pid_unavailable"
+        return useProcessScopedEvents ? "hid_fallback_pid_unavailable" : "hid"
     }
-
-    // Safari currently does not consume these process-scoped synthetic wheel
-    // events. Keep its opt-in path on the proven HID route so enabling the
-    // experiment cannot turn scrolling off completely.
-    private static let processScopedScrollEventsUnsupportedBundleIdentifiers: Set<String> = [
-        "com.apple.Safari",
-    ]
 
     static func shouldUseProcessScopedEvents(
         enabled: Bool,
-        processIdentifier: pid_t?,
-        bundleIdentifier: String? = nil
+        processIdentifier: pid_t?
     ) -> Bool {
-        enabled && processIdentifier != nil &&
-            !processScopedScrollEventsUnsupportedBundleIdentifiers.contains(bundleIdentifier ?? "")
+        enabled && processIdentifier != nil
     }
 
     private static func frontmostWindowCenter() -> CGPoint? {

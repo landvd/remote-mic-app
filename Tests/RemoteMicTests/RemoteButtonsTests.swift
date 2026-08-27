@@ -1211,16 +1211,6 @@ struct RemoteButtonsTests {
         ))
         #expect(!KeyboardInjector.shouldUseProcessScopedEvents(
             enabled: true,
-            processIdentifier: pid_t(123),
-            bundleIdentifier: "com.apple.Safari"
-        ))
-        #expect(KeyboardInjector.shouldUseProcessScopedEvents(
-            enabled: true,
-            processIdentifier: pid_t(123),
-            bundleIdentifier: "com.apple.TextEdit"
-        ))
-        #expect(!KeyboardInjector.shouldUseProcessScopedEvents(
-            enabled: true,
             processIdentifier: nil
         ))
         #expect(!KeyboardInjector.shouldUseProcessScopedEvents(
