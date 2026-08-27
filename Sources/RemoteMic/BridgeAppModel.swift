@@ -2049,9 +2049,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             delegate: self,
             excludedIdentifiers: { [weak self] in
                 guard let self else { return [] }
-                return DispatchQueue.main.sync {
-                    Set(self.bluetoothBridges.keys)
-                }
+                return Set(self.settings.remoteDeviceProfiles.compactMap(\.bluetoothIdentifier))
             }
         )
         discoveryBluetoothBridge = bridge
