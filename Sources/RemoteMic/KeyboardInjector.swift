@@ -79,12 +79,6 @@ enum KeyboardInjector {
     typealias ScrollEventPoster = (Int32) -> Bool
     typealias PageScrollEventPoster = (Int32, Int32) -> Bool
 
-    struct CodexProjectNavigationStep: Equatable {
-        let keyCode: CGKeyCode
-        let flags: CGEventFlags
-    }
-
-
     struct AccessibilityTextCandidate: Equatable {
         let role: String
         let identifier: String
@@ -135,8 +129,6 @@ enum KeyboardInjector {
     static let contextualMenuKeyCode: CGKeyCode = 110
     static let codexPageScrollEventCount = 3
     static let codexPageScrollLines: Int32 = 12
-    static let codexProjectPickerKeyCode: CGKeyCode = 31 // O
-    static let codexProjectNavigationDelayMilliseconds: UInt32 = 150
     static let functionKeyCode: CGKeyCode = 63
     static let leftCommandKeyCode: CGKeyCode = 55
     static let rightCommandKeyCode: CGKeyCode = 54
@@ -2087,26 +2079,30 @@ enum KeyboardInjector {
         return action == .codexPageDown ? -normalizedLines : normalizedLines
     }
 
-    static func codexProjectNavigationSequence(
-        for action: ButtonAction
-    ) -> [CodexProjectNavigationStep] {
-        let directionKeyCode: CGKeyCode
+    static func codexProjectNeighborIndex(
+        labels: [String],
+        activeLabel: String,
+        action: ButtonAction
+    ) -> Int? {
+        let normalizedActiveLabel = activeLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedActiveLabel.isEmpty,
+              let currentIndex = labels.firstIndex(where: {
+                  $0.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedActiveLabel
+              })
+        else { return nil }
+
+        let offset: Int
         switch action {
         case .codexProjectUp:
-            directionKeyCode = 126
+            offset = -1
         case .codexProjectDown:
-            directionKeyCode = 125
+            offset = 1
         default:
-            return []
+            return nil
         }
-        return [
-            CodexProjectNavigationStep(
-                keyCode: codexProjectPickerKeyCode,
-                flags: [.maskCommand, .maskAlternate, .maskShift]
-            ),
-            CodexProjectNavigationStep(keyCode: directionKeyCode, flags: []),
-            CodexProjectNavigationStep(keyCode: 36, flags: []),
-        ]
+
+        let targetIndex = currentIndex + offset
+        return labels.indices.contains(targetIndex) ? targetIndex : nil
     }
 
     private static func postCodexProjectNavigation(_ action: ButtonAction) -> Bool {
@@ -2117,21 +2113,194 @@ enum KeyboardInjector {
             )
             return false
         }
-        let sequence = codexProjectNavigationSequence(for: action)
-        guard !sequence.isEmpty else { return false }
+
+        guard isAccessibilityTrusted else {
+            AppLogger.shared.write(
+                "CODEX PROJECT NAV ignored reason=accessibility_not_trusted action=\(action.rawValue)"
+            )
+            return false
+        }
+
+        guard action == .codexProjectUp || action == .codexProjectDown else {
+            return false
+        }
+
+        guard let processIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
+            return false
+        }
         codexProjectNavigationQueue.async {
-            for (index, step) in sequence.enumerated() {
-                if index > sequence.startIndex {
-                    usleep(codexProjectNavigationDelayMilliseconds * 1_000)
-                }
-                postKey(code: step.keyCode, flags: step.flags)
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == processIdentifier else {
+                AppLogger.shared.write(
+                    "CODEX PROJECT NAV ignored reason=frontmost_changed action=\(action.rawValue)"
+                )
+                return
+            }
+
+            let applicationElement = AXUIElementCreateApplication(processIdentifier)
+            let projectRows = codexProjectRows(in: applicationElement)
+            guard !projectRows.isEmpty else {
+                AppLogger.shared.write(
+                    "CODEX PROJECT NAV failed reason=project_rows_not_found action=\(action.rawValue)"
+                )
+                return
+            }
+            guard let activeProjectLabel = codexActiveProjectLabel(in: applicationElement) else {
+                AppLogger.shared.write(
+                    "CODEX PROJECT NAV failed reason=active_project_not_found " +
+                        "action=\(action.rawValue) rows=\(projectRows.count)"
+                )
+                return
+            }
+            let labels = projectRows.map(\.label)
+            guard let targetIndex = codexProjectNeighborIndex(
+                labels: labels,
+                activeLabel: activeProjectLabel,
+                action: action
+            ) else {
+                AppLogger.shared.write(
+                    "CODEX PROJECT NAV ignored reason=project_boundary_or_mismatch " +
+                        "action=\(action.rawValue) rows=\(projectRows.count)"
+                )
+                return
+            }
+
+            let target = projectRows[targetIndex].element
+            guard axBool(target, attribute: kAXEnabledAttribute) ?? true else {
+                AppLogger.shared.write(
+                    "CODEX PROJECT NAV failed reason=target_disabled action=\(action.rawValue) " +
+                        "target_index=\(targetIndex)"
+                )
+                return
+            }
+            let result = AXUIElementPerformAction(target, kAXPressAction as CFString)
+            guard result == .success else {
+                AppLogger.shared.write(
+                    "CODEX PROJECT NAV failed reason=ax_press action=\(action.rawValue) " +
+                        "target_index=\(targetIndex) ax_error=\(result.rawValue)"
+                )
+                return
             }
             AppLogger.shared.write(
                 "CODEX PROJECT NAV submitted action=\(action.rawValue) " +
-                    "steps=\(sequence.count) delay_ms=\(codexProjectNavigationDelayMilliseconds)"
+                    "rows=\(projectRows.count) target_index=\(targetIndex) method=ax_press"
             )
         }
         return true
+    }
+
+    private static func codexProjectRows(
+        in applicationElement: AXUIElement
+    ) -> [(element: AXUIElement, label: String)] {
+        var rows: [(element: AXUIElement, label: String)] = []
+        var stack = Array(applicationWindows(applicationElement).reversed())
+        var visitedElements: [CFHashCode: [AXUIElement]] = [:]
+        var visitedCount = 0
+
+        while let element = stack.popLast(), visitedCount < maximumAccessibilityTraversalCount {
+            visitedCount += 1
+            let hash = CFHash(element)
+            if visitedElements[hash]?.contains(where: { CFEqual($0, element) }) == true {
+                continue
+            }
+            visitedElements[hash, default: []].append(element)
+
+            let label = axString(element, attribute: kAXDescriptionAttribute)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if axString(element, attribute: kAXRoleAttribute) == kAXButtonRole,
+               !label.isEmpty,
+               codexProjectRowHasAction(element) {
+                rows.append((element, label))
+            }
+
+            var children: [AXUIElement] = []
+            for attribute in accessibilityChildAttributes {
+                for child in axElements(element, attribute: attribute) {
+                    let childHash = CFHash(child)
+                    if visitedElements[childHash]?.contains(where: { CFEqual($0, child) }) == true ||
+                        children.contains(where: { CFEqual($0, child) }) {
+                        continue
+                    }
+                    children.append(child)
+                }
+            }
+            stack.append(contentsOf: children.reversed())
+        }
+        return rows
+    }
+
+    private static func codexActiveProjectLabel(
+        in applicationElement: AXUIElement
+    ) -> String? {
+        var stack = Array(applicationWindows(applicationElement).reversed())
+        var visitedElements: [CFHashCode: [AXUIElement]] = [:]
+        var visitedCount = 0
+
+        while let element = stack.popLast(), visitedCount < maximumAccessibilityTraversalCount {
+            visitedCount += 1
+            let hash = CFHash(element)
+            if visitedElements[hash]?.contains(where: { CFEqual($0, element) }) == true {
+                continue
+            }
+            visitedElements[hash, default: []].append(element)
+
+            if axString(element, attribute: kAXRoleAttribute) == kAXPopUpButtonRole,
+               let label = codexActiveProjectLabel(
+                   from: axString(element, attribute: kAXDescriptionAttribute)
+               ) {
+                return label
+            }
+
+            var children: [AXUIElement] = []
+            for attribute in accessibilityChildAttributes {
+                for child in axElements(element, attribute: attribute) {
+                    let childHash = CFHash(child)
+                    if visitedElements[childHash]?.contains(where: { CFEqual($0, child) }) == true ||
+                        children.contains(where: { CFEqual($0, child) }) {
+                        continue
+                    }
+                    children.append(child)
+                }
+            }
+            stack.append(contentsOf: children.reversed())
+        }
+        return nil
+    }
+
+    private static func codexProjectRowHasAction(_ element: AXUIElement) -> Bool {
+        var stack = axElements(element, attribute: kAXChildrenAttribute)
+        var depthByHash: [CFHashCode: Int] = [:]
+        var visitedElements: [CFHashCode: [AXUIElement]] = [:]
+
+        while let current = stack.popLast() {
+            let depth = depthByHash[CFHash(current)] ?? 1
+            guard depth <= 3 else { continue }
+            let hash = CFHash(current)
+            if visitedElements[hash]?.contains(where: { CFEqual($0, current) }) == true {
+                continue
+            }
+            visitedElements[hash, default: []].append(current)
+
+            let description = axString(current, attribute: kAXDescriptionAttribute).lowercased()
+            let isProjectAction = axString(current, attribute: kAXRoleAttribute) == kAXPopUpButtonRole &&
+                (description.contains("项目操作") || description.contains("project action"))
+            if isProjectAction { return true }
+
+            for child in axElements(current, attribute: kAXChildrenAttribute) {
+                depthByHash[CFHash(child)] = depth + 1
+                stack.append(child)
+            }
+        }
+        return false
+    }
+
+    private static func codexActiveProjectLabel(from description: String) -> String? {
+        let prefixes = ["项目：", "项目:", "Project: ", "Project:"]
+        guard let prefix = prefixes.first(where: { description.hasPrefix($0) }) else {
+            return nil
+        }
+        let label = description.dropFirst(prefix.count)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return label.isEmpty ? nil : String(label)
     }
 
     private static func frontmostWindowCenter() -> CGPoint? {

@@ -1211,25 +1211,43 @@ struct RemoteButtonsTests {
         #expect(!ButtonAction.codexProjectDown.allowsRepeat)
     }
 
-    @Test func codexProjectNavigationUsesPickerDirectionAndConfirmation() {
-        let modifierFlags: CGEventFlags = [.maskCommand, .maskAlternate, .maskShift]
-        #expect(KeyboardInjector.codexProjectNavigationSequence(for: .codexProjectUp) == [
-            KeyboardInjector.CodexProjectNavigationStep(
-                keyCode: KeyboardInjector.codexProjectPickerKeyCode,
-                flags: modifierFlags
-            ),
-            KeyboardInjector.CodexProjectNavigationStep(keyCode: 126, flags: []),
-            KeyboardInjector.CodexProjectNavigationStep(keyCode: 36, flags: []),
-        ])
-        #expect(KeyboardInjector.codexProjectNavigationSequence(for: .codexProjectDown) == [
-            KeyboardInjector.CodexProjectNavigationStep(
-                keyCode: KeyboardInjector.codexProjectPickerKeyCode,
-                flags: modifierFlags
-            ),
-            KeyboardInjector.CodexProjectNavigationStep(keyCode: 125, flags: []),
-            KeyboardInjector.CodexProjectNavigationStep(keyCode: 36, flags: []),
-        ])
-        #expect(KeyboardInjector.codexProjectNavigationSequence(for: .codexPageUp).isEmpty)
+    @Test func codexProjectNavigationSelectsAdjacentSidebarProject() {
+        let labels = ["ctb998", "SayAll", "OLT Manager"]
+        #expect(
+            KeyboardInjector.codexProjectNeighborIndex(
+                labels: labels,
+                activeLabel: "SayAll",
+                action: .codexProjectUp
+            ) == 0
+        )
+        #expect(
+            KeyboardInjector.codexProjectNeighborIndex(
+                labels: labels,
+                activeLabel: "SayAll",
+                action: .codexProjectDown
+            ) == 2
+        )
+        #expect(
+            KeyboardInjector.codexProjectNeighborIndex(
+                labels: labels,
+                activeLabel: " ctb998 ",
+                action: .codexProjectUp
+            ) == nil
+        )
+        #expect(
+            KeyboardInjector.codexProjectNeighborIndex(
+                labels: labels,
+                activeLabel: "missing",
+                action: .codexProjectDown
+            ) == nil
+        )
+        #expect(
+            KeyboardInjector.codexProjectNeighborIndex(
+                labels: labels,
+                activeLabel: "SayAll",
+                action: .codexPageUp
+            ) == nil
+        )
     }
 
     @Test func pageScrollPreservesConfiguredStepAcrossEventBurst() {
