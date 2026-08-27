@@ -176,7 +176,7 @@
 "button_mapping.scroll_settings.process_scoped" = "实验：按前台应用发送滚动（postToPid）";
 "button_mapping.scroll_settings.scope.default" = "默认配置";
 "button_mapping.scroll_settings.scope.application" = "%@ 配置";
-"button_mapping.scroll_settings.hint" = "当前配置只影响对应应用；普通滚轮动作可重复，应用翻页动作使用独立步长和事件间隔。实验开关默认关闭，开启后优先按前台应用发送，无法取得进程时回退到稳定路径。";
+"button_mapping.scroll_settings.hint" = "当前配置只影响对应应用；普通滚轮动作可重复，应用翻页动作使用独立步长和事件间隔。实验开关默认关闭，开启后优先按前台应用发送；Safari 等不兼容应用会回退到稳定路径。";
 "button_mapping.action.disable_switch" = "禁用按键";
 "custom_application.target" = "目标 APP";
 "custom_application.not_configured" = "尚未选择 APP";
