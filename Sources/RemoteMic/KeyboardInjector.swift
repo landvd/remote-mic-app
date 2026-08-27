@@ -79,6 +79,11 @@ enum KeyboardInjector {
     typealias ScrollEventPoster = (Int32) -> Bool
     typealias PageScrollEventPoster = (Int32, Int32) -> Bool
 
+    struct CodexProjectNavigationStep: Equatable {
+        let keyCode: CGKeyCode
+        let flags: CGEventFlags
+    }
+
 
     struct AccessibilityTextCandidate: Equatable {
         let role: String
@@ -130,6 +135,8 @@ enum KeyboardInjector {
     static let contextualMenuKeyCode: CGKeyCode = 110
     static let codexPageScrollEventCount = 3
     static let codexPageScrollLines: Int32 = 12
+    static let codexProjectPickerKeyCode: CGKeyCode = 31 // O
+    static let codexProjectNavigationDelayMilliseconds: UInt32 = 150
     static let functionKeyCode: CGKeyCode = 63
     static let leftCommandKeyCode: CGKeyCode = 55
     static let rightCommandKeyCode: CGKeyCode = 54
@@ -161,6 +168,10 @@ enum KeyboardInjector {
     private static var manualAccessibilityLoggedProcesses: Set<pid_t> = []
     private static let focusQueue = DispatchQueue(
         label: "RemoteMic.application-focus",
+        qos: .userInitiated
+    )
+    private static let codexProjectNavigationQueue = DispatchQueue(
+        label: "RemoteMic.codex-project-navigation",
         qos: .userInitiated
     )
     static let accessibilityChildAttributes = [
@@ -380,6 +391,8 @@ enum KeyboardInjector {
             return true
         case .codexScrollToLatest:
             keyPoster(119, .maskCommand)
+        case .codexProjectUp, .codexProjectDown:
+            return postCodexProjectNavigation(action)
         case .codexPageUp:
             return pageScrollEventPoster(
                 codexPageScrollDelta(for: .codexPageUp, lines: pageScrollLines),
@@ -2072,6 +2085,53 @@ enum KeyboardInjector {
     static func codexPageScrollDelta(for action: ButtonAction, lines: Int32 = codexPageScrollLines) -> Int32 {
         let normalizedLines = min(max(abs(lines), 1), 50)
         return action == .codexPageDown ? -normalizedLines : normalizedLines
+    }
+
+    static func codexProjectNavigationSequence(
+        for action: ButtonAction
+    ) -> [CodexProjectNavigationStep] {
+        let directionKeyCode: CGKeyCode
+        switch action {
+        case .codexProjectUp:
+            directionKeyCode = 126
+        case .codexProjectDown:
+            directionKeyCode = 125
+        default:
+            return []
+        }
+        return [
+            CodexProjectNavigationStep(
+                keyCode: codexProjectPickerKeyCode,
+                flags: [.maskCommand, .maskAlternate, .maskShift]
+            ),
+            CodexProjectNavigationStep(keyCode: directionKeyCode, flags: []),
+            CodexProjectNavigationStep(keyCode: 36, flags: []),
+        ]
+    }
+
+    private static func postCodexProjectNavigation(_ action: ButtonAction) -> Bool {
+        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier ==
+                PresetApplication.codex.bundleIdentifier else {
+            AppLogger.shared.write(
+                "CODEX PROJECT NAV ignored reason=frontmost_app_mismatch action=\(action.rawValue)"
+            )
+            return false
+        }
+        let sequence = codexProjectNavigationSequence(for: action)
+        guard !sequence.isEmpty else { return false }
+        codexProjectNavigationQueue.async {
+            for (index, step) in sequence.enumerated() {
+                if index > sequence.startIndex {
+                    usleep(codexProjectNavigationDelayMilliseconds * 1_000)
+                }
+                postKey(code: step.keyCode, flags: step.flags)
+            }
+            AppLogger.shared.write(
+                "CODEX PROJECT NAV submitted action=\(action.rawValue) " +
+                    "steps=\(sequence.count) delay_ms=\(codexProjectNavigationDelayMilliseconds)"
+            )
+        }
+        return true
     }
 
     private static func frontmostWindowCenter() -> CGPoint? {

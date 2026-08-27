@@ -240,6 +240,8 @@ struct RemoteButtonsTests {
         #expect(ButtonAction.previousCommandLeft.category == .systemAndMedia)
         #expect(ButtonAction.nextCommandRight.category == .systemAndMedia)
         #expect(ButtonAction.codexStopGeneration.category == .applicationSpecific)
+        #expect(ButtonAction.codexProjectUp.category == .applicationSpecific)
+        #expect(ButtonAction.codexProjectDown.category == .applicationSpecific)
         #expect(ButtonAction.codexPageUp.category == .basicKeys)
         #expect(ButtonAction.wechatVoiceMessage.category == .applicationSpecific)
         #expect(ButtonAction.customShortcut.category == .custom)
@@ -1205,6 +1207,29 @@ struct RemoteButtonsTests {
         #expect(KeyboardInjector.codexPageScrollDelta(for: .codexPageDown, lines: 99) == -50)
         #expect(!ButtonAction.codexPageUp.allowsRepeat)
         #expect(!ButtonAction.codexPageDown.allowsRepeat)
+        #expect(!ButtonAction.codexProjectUp.allowsRepeat)
+        #expect(!ButtonAction.codexProjectDown.allowsRepeat)
+    }
+
+    @Test func codexProjectNavigationUsesPickerDirectionAndConfirmation() {
+        let modifierFlags: CGEventFlags = [.maskCommand, .maskAlternate, .maskShift]
+        #expect(KeyboardInjector.codexProjectNavigationSequence(for: .codexProjectUp) == [
+            KeyboardInjector.CodexProjectNavigationStep(
+                keyCode: KeyboardInjector.codexProjectPickerKeyCode,
+                flags: modifierFlags
+            ),
+            KeyboardInjector.CodexProjectNavigationStep(keyCode: 126, flags: []),
+            KeyboardInjector.CodexProjectNavigationStep(keyCode: 36, flags: []),
+        ])
+        #expect(KeyboardInjector.codexProjectNavigationSequence(for: .codexProjectDown) == [
+            KeyboardInjector.CodexProjectNavigationStep(
+                keyCode: KeyboardInjector.codexProjectPickerKeyCode,
+                flags: modifierFlags
+            ),
+            KeyboardInjector.CodexProjectNavigationStep(keyCode: 125, flags: []),
+            KeyboardInjector.CodexProjectNavigationStep(keyCode: 36, flags: []),
+        ])
+        #expect(KeyboardInjector.codexProjectNavigationSequence(for: .codexPageUp).isEmpty)
     }
 
     @Test func pageScrollPreservesConfiguredStepAcrossEventBurst() {
@@ -1234,6 +1259,14 @@ struct RemoteButtonsTests {
         #expect(ButtonAction.codexPageUp.isAvailable(
             forApplicationBundleIdentifier: PresetApplication.codex.bundleIdentifier
         ))
+        #expect(ButtonAction.codexProjectUp.isAvailable(
+            forApplicationBundleIdentifier: PresetApplication.codex.bundleIdentifier
+        ))
+        #expect(!ButtonAction.codexProjectDown.isAvailable(
+            forApplicationBundleIdentifier: "com.example.other"
+        ))
+        #expect(ButtonAction.codexProjectUp.displayName(using: localization) ==
+            localization.text("action.codex_project_up"))
         #expect(ButtonAction.codexPageUp.isAvailable(
             forApplicationBundleIdentifier: "com.example.other"
         ))

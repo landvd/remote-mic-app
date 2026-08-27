@@ -122,6 +122,8 @@
 "action.codex_stop_generation" = "ChatGPT: Stop Generation";
 "action.codex_focus_input" = "ChatGPT: Focus Input";
 "action.codex_scroll_to_latest" = "ChatGPT: Scroll to Latest";
+"action.codex_project_up" = "ChatGPT: Previous Project";
+"action.codex_project_down" = "ChatGPT: Next Project";
 "action.codex_page_up" = "ChatGPT: Page Up";
 "action.codex_page_down" = "ChatGPT: Page Down";
 "action.app.stop_generation" = "Stop Generation";

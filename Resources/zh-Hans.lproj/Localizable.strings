@@ -122,6 +122,8 @@
 "action.codex_stop_generation" = "ChatGPT 停止生成";
 "action.codex_focus_input" = "ChatGPT 聚焦输入框";
 "action.codex_scroll_to_latest" = "ChatGPT 滚动到最新";
+"action.codex_project_up" = "ChatGPT 项目栏上一个";
+"action.codex_project_down" = "ChatGPT 项目栏下一个";
 "action.codex_page_up" = "ChatGPT 上一页";
 "action.codex_page_down" = "ChatGPT 下一页";
 "action.app.stop_generation" = "停止生成";

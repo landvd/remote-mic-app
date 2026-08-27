@@ -457,6 +457,8 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
     case codexStopGeneration
     case codexFocusInput
     case codexScrollToLatest
+    case codexProjectUp
+    case codexProjectDown
     case codexPageUp
     case codexPageDown
     case deleteBackward
@@ -524,6 +526,10 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
             return applicationSpecificName + " " + localization.text("action.app.focus_input")
         case .codexScrollToLatest:
             return applicationSpecificName + " " + localization.text("action.app.scroll_to_latest")
+        case .codexProjectUp:
+            return localization.text("action.codex_project_up")
+        case .codexProjectDown:
+            return localization.text("action.codex_project_down")
         case .codexPageUp:
             return localization.text("action.page_up")
         case .codexPageDown:
@@ -594,6 +600,7 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
              .playPause, .previousCommandLeft, .nextCommandRight, .toggleLongRecording:
             return .systemAndMedia
         case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest,
+             .codexProjectUp, .codexProjectDown,
              .wechatVoiceMessage:
             return .applicationSpecific
         case .customShortcut, .focusInput, .openCustomApplication:
@@ -629,6 +636,8 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
             .codexStopGeneration,
             .codexFocusInput,
             .codexScrollToLatest,
+            .codexProjectUp,
+            .codexProjectDown,
             .codexPageUp,
             .codexPageDown,
         ].contains(self) && presetApplication == nil && !isAppInternal
@@ -644,7 +653,8 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
 
     var applicationSpecificBundleIdentifier: String? {
         switch self {
-        case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest:
+        case .codexStopGeneration, .codexFocusInput, .codexScrollToLatest,
+             .codexProjectUp, .codexProjectDown:
             return PresetApplication.codex.bundleIdentifier
         case .wechatVoiceMessage:
             return PresetApplication.weChat.bundleIdentifier
