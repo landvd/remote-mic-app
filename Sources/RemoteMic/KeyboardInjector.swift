@@ -2008,7 +2008,7 @@ enum KeyboardInjector {
         guard !eventDeltas.isEmpty else { return true }
 
         for (index, eventDelta) in eventDeltas.enumerated() {
-            guard let windowFrame = frontmostWindowFrame(),
+            guard let windowCenter = frontmostWindowCenter(),
                   let source = CGEventSource(stateID: .hidSystemState),
                   let event = CGEvent(
                       scrollWheelEvent2Source: source,
@@ -2020,14 +2020,10 @@ enum KeyboardInjector {
                   )
             else {
                 AppLogger.shared.write(
-                    "PAGE SCROLL failed reason=frontmost_window_unavailable index=\(index)"
+                    "CODEX PAGE SCROLL failed reason=frontmost_window_unavailable index=\(index)"
                 )
                 return false
             }
-            let windowCenter = scrollTargetLocation(
-                windowFrame: windowFrame,
-                mouseLocation: currentMouseLocation()
-            )
             event.location = windowCenter
             // Mark the synthetic event as a discrete mouse-wheel event. Some
             // WebKit-based apps otherwise treat repeated CGEvents as one
@@ -2036,50 +2032,26 @@ enum KeyboardInjector {
             event.setIntegerValueField(.eventSourceUserData, value: syntheticEventMarker)
             event.post(tap: .cghidEventTap)
             AppLogger.shared.write(
-                "PAGE SCROLL posted delta=\(eventDelta) index=\(index + 1)/\(eventDeltas.count) " +
+                "CODEX PAGE SCROLL posted delta=\(eventDelta) index=\(index + 1)/\(eventDeltas.count) " +
                     "location=\(Int(windowCenter.x)),\(Int(windowCenter.y))"
             )
             if index < eventDeltas.index(before: eventDeltas.endIndex) {
                 usleep(useconds_t(interval * 1_000))
             }
         }
-        moveCursorToUpperMiddleOfFrontmostWindow()
+        hideCursorUntilMouseMoves()
         return true
     }
 
-    /// Moves the pointer away from the middle of the page after a remote page
-    /// action. Screen coordinates use a bottom-left origin, so 0.82 places the
-    /// pointer in the upper part of the active window without targeting the
-    /// title bar itself.
-    private static func moveCursorToUpperMiddleOfFrontmostWindow() {
-        guard let frame = frontmostWindowFrame() else { return }
-        let point = upperMiddlePoint(for: frame)
-        CGWarpMouseCursorPosition(point)
-
-        // Keep the pointer visually neutral when the landing point happens to
-        // be over a link or another cursor-sensitive view.
-        let setArrow = {
-            NSCursor.arrow.set()
+    private static func hideCursorUntilMouseMoves() {
+        let hide = {
+            NSCursor.setHiddenUntilMouseMoves(true)
         }
         if Thread.isMainThread {
-            setArrow()
+            hide()
         } else {
-            DispatchQueue.main.async(execute: setArrow)
+            DispatchQueue.main.async(execute: hide)
         }
-        AppLogger.shared.write(
-            "PAGE SCROLL cursor_moved upper_middle=\(Int(point.x)),\(Int(point.y))"
-        )
-    }
-
-    static func upperMiddlePoint(
-        for frame: CGRect,
-        verticalFraction: CGFloat = 0.82
-    ) -> CGPoint {
-        let fraction = min(max(verticalFraction, 0), 1)
-        return CGPoint(
-            x: frame.midX,
-            y: frame.minY + frame.height * fraction
-        )
     }
 
     static func codexPageScrollEventDeltas(
@@ -2100,6 +2072,37 @@ enum KeyboardInjector {
     static func codexPageScrollDelta(for action: ButtonAction, lines: Int32 = codexPageScrollLines) -> Int32 {
         let normalizedLines = min(max(abs(lines), 1), 50)
         return action == .codexPageDown ? -normalizedLines : normalizedLines
+    }
+
+    private static func frontmostWindowCenter() -> CGPoint? {
+        guard let processIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+              let windows = CGWindowListCopyWindowInfo(
+                  [.optionOnScreenOnly, .excludeDesktopElements],
+                  kCGNullWindowID
+              ) as? [[String: Any]] else {
+            return nil
+        }
+
+        let windowFrames = windows.compactMap { window -> CGRect? in
+            guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t,
+                  ownerPID == processIdentifier,
+                  let layer = window[kCGWindowLayer as String] as? Int,
+                  layer == 0,
+                  let boundsValue = window[kCGWindowBounds as String]
+            else { return nil }
+
+            let bounds = boundsValue as! CFDictionary
+            var frame = CGRect.zero
+            guard CGRectMakeWithDictionaryRepresentation(bounds, &frame),
+                  frame.width > 0,
+                  frame.height > 0 else { return nil }
+            return frame
+        }
+
+        guard let frame = windowFrames.max(by: { $0.width * $0.height < $1.width * $1.height }) else {
+            return nil
+        }
+        return CGPoint(x: frame.midX, y: frame.midY)
     }
 
     static func scrollDelta(
