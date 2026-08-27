@@ -75,6 +75,15 @@ struct ATVVProtocolTests {
         #expect(frames == [Data([1, 2, 3]), Data([4, 5, 6])])
         #expect(accumulator.pending == Data([7]))
     }
+
+    @Test func voiceAudioBatchAccumulatorMergesAndFlushesSamples() {
+        var accumulator = VoiceAudioBatchAccumulator(batchSampleCount: 4)
+        #expect(accumulator.append([1, 2, 3]) == nil)
+        #expect(accumulator.append([4, 5]) == [1, 2, 3, 4])
+        #expect(accumulator.pendingSamples == [5])
+        #expect(accumulator.flush() == [5])
+        #expect(accumulator.pendingSamples.isEmpty)
+    }
 }
 
 @Suite("Bluetooth voice tail diagnostics")

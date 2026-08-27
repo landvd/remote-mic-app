@@ -106,6 +106,10 @@ final class XiaomiBluetoothBridge: NSObject {
     private weak var delegate: XiaomiBluetoothBridgeDelegate?
     private let targetIdentifier: UUID?
     private let excludedIdentifiers: () -> Set<UUID>
+    private let bluetoothQueue = DispatchQueue(
+        label: "RemoteMic.bluetooth.bridge",
+        qos: .userInitiated
+    )
     private var central: CBCentralManager?
     private var centralGeneration: UInt64?
     private var peripheral: CBPeripheral?
@@ -148,13 +152,18 @@ final class XiaomiBluetoothBridge: NSObject {
     private let modelNumberUUID = CBUUID(string: "2A24")
 
     var deviceIdentifier: UUID? {
-        peripheral?.identifier ?? targetIdentifier
+        bluetoothQueue.sync {
+            peripheral?.identifier ?? targetIdentifier
+        }
     }
 
     private(set) var state: BluetoothBridgeState = .stopped {
         didSet {
             guard oldValue != state else { return }
-            delegate?.bluetoothBridge(self, didChange: state)
+            let newState = state
+            notifyDelegate { delegate in
+                delegate.bluetoothBridge(self, didChange: newState)
+            }
         }
     }
 
@@ -171,7 +180,23 @@ final class XiaomiBluetoothBridge: NSObject {
         super.init()
     }
 
+    private func notifyDelegate(
+        _ action: @escaping (XiaomiBluetoothBridgeDelegate) -> Void
+    ) {
+        guard let delegate else { return }
+        DispatchQueue.main.async { [weak delegate] in
+            guard let delegate else { return }
+            action(delegate)
+        }
+    }
+
     func start() {
+        bluetoothQueue.async { [weak self] in
+            self?.startOnBluetoothQueue()
+        }
+    }
+
+    private func startOnBluetoothQueue() {
         shouldRun = true
         reconnectWorkItem?.cancel()
         reconnectPolicy.reset()
@@ -179,6 +204,12 @@ final class XiaomiBluetoothBridge: NSObject {
     }
 
     func stop() {
+        bluetoothQueue.async { [self] in
+            stopOnBluetoothQueue()
+        }
+    }
+
+    private func stopOnBluetoothQueue() {
         shouldRun = false
         reconnectWorkItem?.cancel()
         reconnectPolicy.reset()
@@ -196,6 +227,12 @@ final class XiaomiBluetoothBridge: NSObject {
     }
 
     func reconnectNow() {
+        bluetoothQueue.async { [weak self] in
+            self?.reconnectNowOnBluetoothQueue()
+        }
+    }
+
+    private func reconnectNowOnBluetoothQueue() {
         guard shouldRun else { return }
         reconnectWorkItem?.cancel()
         reconnectPolicy.reset()
@@ -232,7 +269,7 @@ final class XiaomiBluetoothBridge: NSObject {
         lifecycle = .scanning(generation)
         let manager = CBCentralManager(
             delegate: self,
-            queue: .main,
+            queue: bluetoothQueue,
             options: [CBCentralManagerOptionShowPowerAlertKey: true]
         )
         central = manager
@@ -244,6 +281,13 @@ final class XiaomiBluetoothBridge: NSObject {
 
     @discardableResult
     func requestMicrophoneOpen() -> Bool {
+        bluetoothQueue.sync {
+            requestMicrophoneOpenOnBluetoothQueue()
+        }
+    }
+
+    @discardableResult
+    private func requestMicrophoneOpenOnBluetoothQueue() -> Bool {
         guard let generation = currentGeneration(),
               ATVVSessionGate.canOpenMicrophone(
                   phase: lifecycle,
@@ -272,6 +316,13 @@ final class XiaomiBluetoothBridge: NSObject {
 
     @discardableResult
     func requestMicrophoneExtend() -> Bool {
+        bluetoothQueue.sync {
+            requestMicrophoneExtendOnBluetoothQueue()
+        }
+    }
+
+    @discardableResult
+    private func requestMicrophoneExtendOnBluetoothQueue() -> Bool {
         guard microphoneOpened,
               streaming,
               let command = ATVVProtocol.microphoneExtend(
@@ -289,6 +340,13 @@ final class XiaomiBluetoothBridge: NSObject {
 
     @discardableResult
     func requestMicrophoneClose() -> Bool {
+        bluetoothQueue.sync {
+            requestMicrophoneCloseOnBluetoothQueue()
+        }
+    }
+
+    @discardableResult
+    private func requestMicrophoneCloseOnBluetoothQueue() -> Bool {
         guard microphoneOpened || streaming else { return true }
         let cancelledOpenAt = ATVVSessionGate.cancelledOpenDate(
             microphoneOpened: microphoneOpened,
@@ -414,7 +472,7 @@ final class XiaomiBluetoothBridge: NSObject {
             self.failInitialization(LocalizedMessage("connection.error.voice_service_timeout"))
         }
         initializationTimeoutWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
+        bluetoothQueue.asyncAfter(deadline: .now() + 8, execute: work)
     }
 
     private func startConnectionTimeout(generation: UInt64) {
@@ -438,13 +496,15 @@ final class XiaomiBluetoothBridge: NSObject {
             self.finishAttempt(reconnectAfter: delay)
         }
         connectionTimeoutWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
+        bluetoothQueue.asyncAfter(deadline: .now() + 8, execute: work)
     }
 
     private func resetSession() {
         if streaming {
             streaming = false
-            delegate?.bluetoothBridgeDidStopVoice(self)
+            notifyDelegate { delegate in
+                delegate.bluetoothBridgeDidStopVoice(self)
+            }
         }
         microphoneOpened = false
         cancelledMicrophoneOpenAt = nil
@@ -510,7 +570,7 @@ final class XiaomiBluetoothBridge: NSObject {
             self.startFreshConnectionCycle()
         }
         reconnectWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        bluetoothQueue.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     @discardableResult
@@ -524,7 +584,7 @@ final class XiaomiBluetoothBridge: NSObject {
     }
 
     private func closeMicrophoneIfNeeded() {
-        _ = requestMicrophoneClose()
+        _ = requestMicrophoneCloseOnBluetoothQueue()
     }
 
     private func requestCapabilitiesIfPossible() {
@@ -581,7 +641,7 @@ final class XiaomiBluetoothBridge: NSObject {
                 AppLogger.shared.write("BLE READY name=\(peripheral.name ?? "MI RC")")
             }
         case 0x08:
-            guard requestMicrophoneOpen() else {
+            guard requestMicrophoneOpenOnBluetoothQueue() else {
                 AppLogger.shared.write("ATVV MIC_OPEN remote_request_ignored")
                 return
             }
@@ -663,7 +723,9 @@ final class XiaomiBluetoothBridge: NSObject {
         lastStopAt = nil
         guard !streaming else { return }
         streaming = true
-        delegate?.bluetoothBridgeDidStartVoice(self)
+        notifyDelegate { delegate in
+            delegate.bluetoothBridgeDidStartVoice(self)
+        }
         AppLogger.shared.write("ATVV STREAM START session=\(sessionID)")
     }
 
@@ -678,7 +740,9 @@ final class XiaomiBluetoothBridge: NSObject {
         AppLogger.shared.write(
             "ATVV STREAM STOP session=\(sessionID) partial_frame_bytes=\(partialFrameBytes)"
         )
-        delegate?.bluetoothBridgeDidStopVoice(self)
+        notifyDelegate { delegate in
+            delegate.bluetoothBridgeDidStopVoice(self)
+        }
     }
 
     private func handleAudio(_ data: Data) {
@@ -728,7 +792,9 @@ final class XiaomiBluetoothBridge: NSObject {
             }
             let decoded = decoder.decode(frame)
             let samples = PCMPostprocessor.process(decoded, gainDB: settings.gainDB)
-            delegate?.bluetoothBridge(self, didDecode: samples)
+            notifyDelegate { delegate in
+                delegate.bluetoothBridge(self, didDecode: samples)
+            }
         }
     }
 
@@ -1028,13 +1094,17 @@ extension XiaomiBluetoothBridge {
                     "BLE BATTERY characteristic_discovery_failed " +
                         AppLogger.errorFields(error)
                 )
-                delegate?.bluetoothBridge(self, didUpdateBatteryLevel: nil)
-                delegate?.bluetoothBridge(self, didUpdatePowerState: nil)
+                notifyDelegate { delegate in
+                    delegate.bluetoothBridge(self, didUpdateBatteryLevel: nil)
+                    delegate.bluetoothBridge(self, didUpdatePowerState: nil)
+                }
                 return
             }
             guard let characteristics = service.characteristics else {
-                delegate?.bluetoothBridge(self, didUpdateBatteryLevel: nil)
-                delegate?.bluetoothBridge(self, didUpdatePowerState: nil)
+                notifyDelegate { delegate in
+                    delegate.bluetoothBridge(self, didUpdateBatteryLevel: nil)
+                    delegate.bluetoothBridge(self, didUpdatePowerState: nil)
+                }
                 return
             }
             if let characteristic = characteristics.first(where: { $0.uuid == batteryLevelUUID }) {
@@ -1044,7 +1114,9 @@ extension XiaomiBluetoothBridge {
                     peripheral.setNotifyValue(true, for: characteristic)
                 }
             } else {
-                delegate?.bluetoothBridge(self, didUpdateBatteryLevel: nil)
+                notifyDelegate { delegate in
+                    delegate.bluetoothBridge(self, didUpdateBatteryLevel: nil)
+                }
             }
             if let characteristic = characteristics.first(where: { $0.uuid == batteryLevelStatusUUID }) {
                 batteryStatusCharacteristic = characteristic
@@ -1053,7 +1125,9 @@ extension XiaomiBluetoothBridge {
                     peripheral.setNotifyValue(true, for: characteristic)
                 }
             } else {
-                delegate?.bluetoothBridge(self, didUpdatePowerState: nil)
+                notifyDelegate { delegate in
+                    delegate.bluetoothBridge(self, didUpdatePowerState: nil)
+                }
             }
             return
         }
@@ -1165,12 +1239,16 @@ extension XiaomiBluetoothBridge {
                 AppLogger.shared.write(
                     "BLE BATTERY read_failed " + AppLogger.errorFields(error)
                 )
-                delegate?.bluetoothBridge(self, didUpdateBatteryLevel: nil)
+                notifyDelegate { delegate in
+                    delegate.bluetoothBridge(self, didUpdateBatteryLevel: nil)
+                }
             } else if characteristic.uuid == batteryLevelStatusUUID {
                 AppLogger.shared.write(
                     "BLE POWER read_failed " + AppLogger.errorFields(error)
                 )
-                delegate?.bluetoothBridge(self, didUpdatePowerState: nil)
+                notifyDelegate { delegate in
+                    delegate.bluetoothBridge(self, didUpdatePowerState: nil)
+                }
             } else if characteristic.uuid == modelNumberUUID {
                 AppLogger.shared.write(
                     "BLE MODEL read_failed " + AppLogger.errorFields(error)
@@ -1182,7 +1260,9 @@ extension XiaomiBluetoothBridge {
         if characteristic.uuid == batteryLevelUUID {
             let level = data.first.map(Int.init)
             AppLogger.shared.write("BLE BATTERY level=\(level.map(String.init) ?? "unknown")")
-            delegate?.bluetoothBridge(self, didUpdateBatteryLevel: level)
+            notifyDelegate { delegate in
+                delegate.bluetoothBridge(self, didUpdateBatteryLevel: level)
+            }
             return
         }
         if characteristic.uuid == batteryLevelStatusUUID {
@@ -1190,7 +1270,9 @@ extension XiaomiBluetoothBridge {
             AppLogger.shared.write(
                 "BLE POWER state=\(powerState?.logValue ?? "unavailable")"
             )
-            delegate?.bluetoothBridge(self, didUpdatePowerState: powerState)
+            notifyDelegate { delegate in
+                delegate.bluetoothBridge(self, didUpdatePowerState: powerState)
+            }
             return
         }
         if characteristic.uuid == modelNumberUUID {
@@ -1210,7 +1292,9 @@ extension XiaomiBluetoothBridge {
                 return
             }
             AppLogger.shared.write("BLE MODEL identified=\(model.rawValue)")
-            delegate?.bluetoothBridge(self, didIdentifyRemoteModel: model)
+            notifyDelegate { delegate in
+                delegate.bluetoothBridge(self, didIdentifyRemoteModel: model)
+            }
             return
         }
         if characteristic.uuid == controlUUID {

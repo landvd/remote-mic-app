@@ -329,6 +329,35 @@ enum DefaultInputFallbackPolicy {
     }
 }
 
+struct VoiceAudioBatchAccumulator {
+    let batchSampleCount: Int
+    private(set) var pendingSamples: [Int16] = []
+
+    init(batchSampleCount: Int = 960) {
+        self.batchSampleCount = max(1, batchSampleCount)
+    }
+
+    mutating func append(_ samples: [Int16]) -> [Int16]? {
+        guard !samples.isEmpty else { return nil }
+        pendingSamples.append(contentsOf: samples)
+        guard pendingSamples.count >= batchSampleCount else { return nil }
+        let batch = Array(pendingSamples.prefix(batchSampleCount))
+        pendingSamples.removeFirst(batchSampleCount)
+        return batch
+    }
+
+    mutating func flush() -> [Int16]? {
+        guard !pendingSamples.isEmpty else { return nil }
+        let batch = pendingSamples
+        pendingSamples.removeAll(keepingCapacity: true)
+        return batch
+    }
+
+    mutating func reset() {
+        pendingSamples.removeAll(keepingCapacity: true)
+    }
+}
+
 final class VirtualAudioOutput {
     private var engine: AVAudioEngine?
     private var player: AVAudioPlayerNode?
@@ -341,6 +370,7 @@ final class VirtualAudioOutput {
     private var pendingDrainLogContexts: [String] = []
     private var drainCompletion: (() -> Void)?
     private var drainGeneration: UInt64 = 0
+    private var voiceBatchAccumulator = VoiceAudioBatchAccumulator()
     private let sourceFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
         sampleRate: 16_000,
@@ -355,7 +385,7 @@ final class VirtualAudioOutput {
     var pendingVoiceBufferCountForDiagnostics: Int {
         playbackLock.lock()
         defer { playbackLock.unlock() }
-        return pendingVoiceBufferCount
+        return pendingVoiceBufferCount + (voiceBatchAccumulator.pendingSamples.isEmpty ? 0 : 1)
     }
 
     var hasAllocatedOutputResources: Bool {
@@ -512,14 +542,23 @@ final class VirtualAudioOutput {
             logRejectedWrite(reason: "playback_not_ready")
             return false
         }
-        guard let buffer = makeBuffer(samples: samples) else {
-            logRejectedWrite(reason: "buffer_creation_failed")
-            return false
+        guard let batch = voiceBatchAccumulator.append(samples) else {
+            return true
         }
         if rejectedWriteCount > 0 {
             AppLogger.shared.write("AUDIO WRITE resumed rejected_count=\(rejectedWriteCount) state={\(basicDiagnosticState())}")
             rejectedWriteCount = 0
         }
+        guard scheduleVoiceBuffer(batch, on: player) else {
+            voiceBatchAccumulator.reset()
+            logRejectedWrite(reason: "buffer_creation_failed")
+            return false
+        }
+        return true
+    }
+
+    private func scheduleVoiceBuffer(_ samples: [Int16], on player: AVAudioPlayerNode) -> Bool {
+        guard let buffer = makeBuffer(samples: samples) else { return false }
         playbackLock.lock()
         pendingVoiceBufferCount += 1
         playbackLock.unlock()
@@ -542,6 +581,11 @@ final class VirtualAudioOutput {
         maximumDelay: TimeInterval = 0.75,
         completion: @escaping () -> Void
     ) {
+        if let pendingBatch = voiceBatchAccumulator.flush(),
+           let player,
+           isPlaybackReady {
+            _ = scheduleVoiceBuffer(pendingBatch, on: player)
+        }
         playbackLock.lock()
         drainGeneration &+= 1
         let generation = drainGeneration
@@ -582,6 +626,7 @@ final class VirtualAudioOutput {
 
     private func flushPlayer() {
         playbackLock.lock()
+        voiceBatchAccumulator.reset()
         let interruptedContexts = pendingVoiceBufferCount > 0 ? pendingDrainLogContexts : []
         pendingVoiceBufferCount = 0
         pendingDrainLogContexts.removeAll()
@@ -604,6 +649,7 @@ final class VirtualAudioOutput {
 
     func stop() {
         playbackLock.lock()
+        voiceBatchAccumulator.reset()
         let interruptedContexts = pendingVoiceBufferCount > 0 ? pendingDrainLogContexts : []
         pendingVoiceBufferCount = 0
         pendingDrainLogContexts.removeAll()
