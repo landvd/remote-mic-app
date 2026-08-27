@@ -9,6 +9,7 @@
 - [语音流期间进程 CPU 接近占满单核](./2026-08-24-voice-stream-cpu-saturation.md)
 - [不同版本的无线麦可同时运行](./2026-08-24-duplicate-app-instances.md)
 - [语音结束时最后一个词偶发未识别](./2026-08-24-final-word-tail-loss/DEBUG.md)
+- [ChatGPT 翻页连续触发时后续滚动不明显](./2026-08-23-chatgpt-page-scroll-repeat.md)
 - [设置窗口在失去焦点后被移出屏幕](./2026-08-22-settings-window-hides-on-deactivate.md)
 - [Intel macOS 13 将 SayAll App 图标显示为完整正方形](./2026-08-21-intel-macos13-square-app-icon.md)
 - [预览发布身份校验缺少 GH_TOKEN](./2026-08-21-release-identity-missing-gh-token.md)

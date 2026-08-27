@@ -455,53 +455,107 @@ struct HardwareSimulationIntegrationTests {
         #expect(scheduler.pendingTaskCount == 0)
     }
 
-    @Test func appSwitcherSessionUsesAnyMappedButtonAndTVAdvancesThenReleasesOnDisconnect() throws {
-        let suiteName = "HardwareSimulationIntegrationTests.appSwitcherSession.\(UUID().uuidString)"
+    @Test func appSwitcherNavigationUsesCommandArrowsForRemoteLeftAndRight() throws {
+        let suiteName = "HardwareSimulationIntegrationTests.appSwitcherNavigation.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = AppSettings(defaults: defaults)
         settings.customMappingEnabled = true
-        settings.setAction(.appSwitcher, for: .ok)
-        settings.setAction(.escape, for: .tv)
+        settings.setAction(.appSwitcher, for: .menu)
+        settings.setAction(.arrowLeft, for: .left)
+        settings.setAction(.arrowRight, for: .right)
         let profileID = try #require(settings.selectedRemoteProfileID)
-        var posted: [(CGKeyCode, Bool, CGEventFlags)] = []
-        var performedActions: [ButtonAction] = []
+        let scheduler = TestHIDRemoteScheduler()
+        let recorder = HIDActionRecorder()
         let monitor = HIDRemoteMonitor(
             settings: settings,
             profileID: profileID,
             ownsEventSuppressor: false,
+            scheduler: scheduler,
             runtimePermissions: { true },
-            actionPerformer: { _, _, configured in
-                performedActions.append(configured.action)
+            actionPerformer: { button, trigger, configured in
+                recorder.events.append(.init(
+                    button: button,
+                    trigger: trigger,
+                    action: configured.action
+                ))
                 return true
             },
-            frontmostBundleIdentifier: { PresetApplication.codex.bundleIdentifier },
-            appSwitcherKeyStatePoster: { code, isDown, flags in
-                posted.append((code, isDown, flags))
-                return true
-            }
+            frontmostBundleIdentifier: { PresetApplication.codex.bundleIdentifier }
         )
-        monitor.connectSimulatedDevice(fingerprint: "app-switcher", profileID: profileID)
+        monitor.connectSimulatedDevice(
+            fingerprint: "app-switcher",
+            profileID: profileID,
+            isSeized: false
+        )
 
-        let ok = XiaomiVoiceRemoteButton.ok.report
-        let tv = XiaomiVoiceRemoteButton.tv.report
-        let release = Data(repeating: 0, count: ok.data.count)
-        monitor.handleSimulatedReport(reportID: ok.reportID, data: ok.data)
-        monitor.handleSimulatedReport(reportID: ok.reportID, data: release)
-        monitor.handleSimulatedReport(reportID: tv.reportID, data: tv.data)
-        monitor.handleSimulatedReport(reportID: tv.reportID, data: release)
+        let empty = Data([0, 0, 0, 0, 0, 0])
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0x65, 0, 0, 0, 0, 0]))
+        monitor.handleSimulatedReport(reportID: 1, data: empty)
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0x4F, 0, 0, 0, 0, 0]))
+        monitor.handleSimulatedReport(reportID: 1, data: empty)
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0x50, 0, 0, 0, 0, 0]))
+        monitor.handleSimulatedReport(reportID: 1, data: empty)
         monitor.disconnectSimulatedDevice()
 
-        #expect(performedActions.isEmpty)
-        #expect(posted.map { $0.0 } == [
-            KeyboardInjector.leftCommandKeyCode, 48, 48, 48, 48,
-            KeyboardInjector.leftCommandKeyCode,
+        #expect(recorder.events == [
+            .init(button: .menu, trigger: .singleClick, action: .appSwitcher),
+            .init(button: .right, trigger: .singleClick, action: .nextCommandRight),
+            .init(button: .left, trigger: .singleClick, action: .previousCommandLeft),
         ])
-        #expect(posted.map { $0.1 } == [true, true, false, true, false, false])
-        #expect(posted[0].2 == .maskCommand)
-        #expect(posted[1].2 == .maskCommand)
-        #expect(posted[2].2 == .maskCommand)
-        #expect(posted[5].2.isEmpty)
+        #expect(scheduler.pendingTaskCount == 0)
+    }
+
+    @Test func appSwitcherNavigationWindowRefreshesAfterEachArrow() throws {
+        let suiteName = "HardwareSimulationIntegrationTests.appSwitcherNavigationRefresh.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppSettings(defaults: defaults)
+        settings.customMappingEnabled = true
+        settings.setAction(.appSwitcher, for: .menu)
+        settings.setAction(.arrowRight, for: .right)
+        let profileID = try #require(settings.selectedRemoteProfileID)
+        let scheduler = TestHIDRemoteScheduler()
+        let recorder = HIDActionRecorder()
+        let monitor = HIDRemoteMonitor(
+            settings: settings,
+            profileID: profileID,
+            ownsEventSuppressor: false,
+            scheduler: scheduler,
+            runtimePermissions: { true },
+            actionPerformer: { button, trigger, configured in
+                recorder.events.append(.init(
+                    button: button,
+                    trigger: trigger,
+                    action: configured.action
+                ))
+                return true
+            },
+            frontmostBundleIdentifier: { PresetApplication.codex.bundleIdentifier }
+        )
+        monitor.connectSimulatedDevice(
+            fingerprint: "app-switcher-refresh",
+            profileID: profileID,
+            isSeized: false
+        )
+
+        let empty = Data([0, 0, 0, 0, 0, 0])
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0x65, 0, 0, 0, 0, 0]))
+        monitor.handleSimulatedReport(reportID: 1, data: empty)
+        scheduler.advance(toMilliseconds: HIDRemoteTiming.appSwitcherNavigationMilliseconds - 1)
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0x4F, 0, 0, 0, 0, 0]))
+        monitor.handleSimulatedReport(reportID: 1, data: empty)
+        scheduler.advance(toMilliseconds: HIDRemoteTiming.appSwitcherNavigationMilliseconds * 2 - 2)
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0x4F, 0, 0, 0, 0, 0]))
+        monitor.handleSimulatedReport(reportID: 1, data: empty)
+        monitor.disconnectSimulatedDevice()
+
+        #expect(recorder.events == [
+            .init(button: .menu, trigger: .singleClick, action: .appSwitcher),
+            .init(button: .right, trigger: .singleClick, action: .nextCommandRight),
+            .init(button: .right, trigger: .singleClick, action: .nextCommandRight),
+        ])
+        #expect(scheduler.pendingTaskCount == 0)
     }
 
     @Test func HIDDiagnosticsTraceReportsEdgesGesturesAndActionsWithoutRawPayloads() throws {
@@ -874,6 +928,42 @@ struct HardwareSimulationIntegrationTests {
             )?.cgEvent)
             return (try #require(CGEventType(rawValue: 14)), event)
         }
+    }
+
+    @Test func powerWeChatVoiceMessageProducesOnlyPressAndReleaseHoldEvents() throws {
+        let suiteName = "HardwareSimulationIntegrationTests.powerWeChatVoiceMessage.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppSettings(defaults: defaults)
+        settings.customMappingEnabled = true
+        settings.setAction(.wechatVoiceMessage, for: .power)
+        let profileID = try #require(settings.selectedRemoteProfileID)
+        var phases: [String] = []
+        let monitor = HIDRemoteMonitor(
+            settings: settings,
+            profileID: profileID,
+            ownsEventSuppressor: false,
+            runtimePermissions: { true },
+            actionPerformer: { _, _, _ in
+                Issue.record("hold action must not use the tap action performer")
+                return false
+            },
+            holdActionPerformer: { button, phase, configured in
+                phases.append("\(button.rawValue):\(phase.rawValue):\(configured.action.rawValue)")
+                return true
+            },
+            frontmostBundleIdentifier: { PresetApplication.weChat.bundleIdentifier }
+        )
+
+        monitor.connectSimulatedDevice(fingerprint: "power-voice", profileID: profileID)
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0x66, 0, 0, 0, 0, 0]))
+        monitor.handleSimulatedReport(reportID: 1, data: Data([0, 0, 0, 0, 0, 0]))
+        monitor.disconnectSimulatedDevice()
+
+        #expect(phases == [
+            "power:press:wechatVoiceMessage",
+            "power:release:wechatVoiceMessage",
+        ])
     }
 
     private func driveHIDScenario(

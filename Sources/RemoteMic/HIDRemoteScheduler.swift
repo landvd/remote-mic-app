@@ -22,6 +22,7 @@ enum HIDRemoteTiming {
     static let appSwitcherTimeoutMilliseconds: UInt64 = 15_000
     static let appSwitcherFrontmostPollMilliseconds: UInt64 = 500
     static let appSwitcherConfirmationProbeMilliseconds: UInt64 = 300
+    static let appSwitcherNavigationMilliseconds: UInt64 = 3_000
 
     static func repeatIntervalMilliseconds(for button: RemoteButton) -> UInt64? {
         switch button {
